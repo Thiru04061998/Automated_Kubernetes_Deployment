@@ -1,3 +1,13 @@
+terraform {
+  required_version = ">= 1.6"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
 provider "aws" {
   region = "us-east-1"
 }
@@ -22,27 +32,25 @@ module "vpc" {
 }
 
 # ---------------------------
-# EKS Cluster + Node Group (updated for module v20)
+# EKS Cluster + Node Group
 # ---------------------------
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "20.0.0"
+  version = "20.2.0"
 
   cluster_name    = "flask-hello-cluster"
   cluster_version = "1.28"
 
-  vpc_id               = module.vpc.vpc_id
-  private_subnets      = module.vpc.private_subnets
-  public_subnets       = module.vpc.public_subnets
-  cluster_endpoint_private_access = false
-  cluster_endpoint_public_access  = true
+  vpc_id          = module.vpc.vpc_id
+  private_subnets = module.vpc.private_subnets
+  public_subnets  = module.vpc.public_subnets
 
-  # Node groups (must use this format for module v20+)
+  # Node groups using "node_groups" block supported in v20+
   node_groups = {
     flask_nodes = {
       desired_capacity = 2
-      max_capacity     = 3
       min_capacity     = 1
+      max_capacity     = 3
       instance_type    = "t3.medium"
     }
   }
