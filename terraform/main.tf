@@ -1,5 +1,5 @@
 provider "aws" {
-  region = "us-east-1"  # Change to your region
+  region = "us-east-1"
 }
 
 # ---------------------------
@@ -22,20 +22,22 @@ module "vpc" {
 }
 
 # ---------------------------
-# EKS Cluster + Node Group
+# EKS Cluster + Node Group (updated for module v20)
 # ---------------------------
 module "eks" {
-  source          = "terraform-aws-modules/eks/aws"
-  version         = "20.0.0"
+  source  = "terraform-aws-modules/eks/aws"
+  version = "20.0.0"
 
   cluster_name    = "flask-hello-cluster"
   cluster_version = "1.28"
 
-  vpc_id          = module.vpc.vpc_id
-  subnets         = module.vpc.private_subnets
+  vpc_id               = module.vpc.vpc_id
+  private_subnets      = module.vpc.private_subnets
+  public_subnets       = module.vpc.public_subnets
+  cluster_endpoint_private_access = false
+  cluster_endpoint_public_access  = true
 
-  manage_aws_auth = true
-
+  # Node groups (must use this format for module v20+)
   node_groups = {
     flask_nodes = {
       desired_capacity = 2
@@ -44,35 +46,4 @@ module "eks" {
       instance_type    = "t3.medium"
     }
   }
-}
-
-# ---------------------------
-# Outputs
-# ---------------------------
-output "vpc_id" {
-  value = module.vpc.vpc_id
-}
-
-output "public_subnets" {
-  value = module.vpc.public_subnets
-}
-
-output "private_subnets" {
-  value = module.vpc.private_subnets
-}
-
-output "cluster_name" {
-  value = module.eks.cluster_id
-}
-
-output "cluster_endpoint" {
-  value = module.eks.cluster_endpoint
-}
-
-output "cluster_kubeconfig_certificate_authority_data" {
-  value = module.eks.cluster_certificate_authority_data
-}
-
-output "node_role_arn" {
-  value = module.eks.node_groups["flask_nodes"].iam_role_arn
 }
