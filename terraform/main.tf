@@ -1,57 +1,141 @@
-terraform {
-  required_version = ">= 1.6"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
+####################
+# VPC
+####################
+resource "aws_vpc" "eks_vpc" {
+  cidr_block = "10.0.0.0/16"
+  tags = { Name = "eks-vpc" }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.eks_vpc.id
+}
+
+resource "aws_subnet" "subnet1" {
+  vpc_id                  = aws_vpc.eks_vpc.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "ap-south-1a"
+  map_public_ip_on_launch = true
+}
+
+resource "aws_subnet" "subnet2" {
+  vpc_id                  = aws_vpc.eks_vpc.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "ap-south-1b"
+  map_public_ip_on_launch = true
+}
+
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.eks_vpc.id
+}
+
+resource "aws_route" "internet" {
+  route_table_id         = aws_route_table.public_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.igw.id
+}
+
+resource "aws_route_table_association" "rt1" {
+  subnet_id      = aws_subnet.subnet1.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table_association" "rt2" {
+  subnet_id      = aws_subnet.subnet2.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+####################
+# IAM Role – EKS
+####################
+resource "aws_iam_role" "eks_role" {
+  name = "eks-cluster-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "eks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_policy" {
+  role       = aws_iam_role.eks_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+}
+
+####################
+# EKS Cluster
+####################
+resource "aws_eks_cluster" "eks" {
+  name     = var.cluster_name
+  role_arn = aws_iam_role.eks_role.arn
+
+  vpc_config {
+    subnet_ids = [
+      aws_subnet.subnet1.id,
+      aws_subnet.subnet2.id
+    ]
   }
+
+  depends_on = [aws_iam_role_policy_attachment.eks_policy]
 }
 
-provider "aws" {
-  region = "us-east-1"
+####################
+# IAM Role – Nodes
+####################
+resource "aws_iam_role" "node_role" {
+  name = "eks-node-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
 }
 
-# ---------------------------
-# VPC + Subnets
-# ---------------------------
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "4.0.0"
-
-  name = "flask-vpc"
-  cidr = "10.0.0.0/16"
-
-  azs  = ["us-east-1a", "us-east-1b"]
-
-  public_subnets  = ["10.0.1.0/24","10.0.2.0/24"]
-  private_subnets = ["10.0.11.0/24","10.0.12.0/24"]
-
-  enable_nat_gateway = true
-  single_nat_gateway = true
+resource "aws_iam_role_policy_attachment" "node_policy1" {
+  role       = aws_iam_role.node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 }
 
-# ---------------------------
-# EKS Cluster + Node Group
-# ---------------------------
-module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "20.2.0"
+resource "aws_iam_role_policy_attachment" "node_policy2" {
+  role       = aws_iam_role.node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
 
-  cluster_name    = "flask-hello-cluster"
-  cluster_version = "1.28"
+resource "aws_iam_role_policy_attachment" "node_policy3" {
+  role       = aws_iam_role.node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
 
-  vpc_id          = module.vpc.vpc_id
-  private_subnets = module.vpc.private_subnets
-  public_subnets  = module.vpc.public_subnets
+####################
+# Node Group
+####################
+resource "aws_eks_node_group" "node_group" {
+  cluster_name    = aws_eks_cluster.eks.name
+  node_group_name = "eks-nodes"
+  node_role_arn   = aws_iam_role.node_role.arn
+  subnet_ids      = [
+    aws_subnet.subnet1.id,
+    aws_subnet.subnet2.id
+  ]
 
-  # Node groups using "node_groups" block supported in v20+
-  node_groups = {
-    flask_nodes = {
-      desired_capacity = 2
-      min_capacity     = 1
-      max_capacity     = 3
-      instance_type    = "t3.medium"
-    }
+  instance_types = [var.node_instance_type]
+
+  scaling_config {
+    desired_size = 2
+    min_size     = 1
+    max_size     = 3
   }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.node_policy1,
+    aws_iam_role_policy_attachment.node_policy2,
+    aws_iam_role_policy_attachment.node_policy3
+  ]
 }
