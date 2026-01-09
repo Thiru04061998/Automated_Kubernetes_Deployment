@@ -2,46 +2,60 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "thiru04061998/flask-hello"
+        // Your Docker Hub image name
+        IMAGE = "thirumoorthyk/flask-hello:latest"
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/Thiru04061998/Automated_Kubernetes_Deployment.git'
+                // Checkout your GitHub repo
+                checkout scm
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $DOCKER_IMAGE:latest .'
+                // Build Docker image from Dockerfile
+                sh 'docker build -t $IMAGE .'
             }
         }
 
         stage('Push Docker Image') {
             steps {
+                // Use Jenkins credentials to push to Docker Hub
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
+                    credentialsId: 'dockerhub-creds', 
+                    usernameVariable: 'USER', 
+                    passwordVariable: 'PASS'
                 )]) {
                     sh '''
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker push $DOCKER_IMAGE:latest
+                    echo $PASS | docker login -u $USER --password-stdin
+                    docker push $IMAGE
                     '''
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to EKS') {
             steps {
-                sh '''
-                kubectl apply -f k8s/deployment.yaml
-                kubectl apply -f k8s/service.yaml
-                '''
+                // Use kubeconfig secret file to deploy to Kubernetes
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl apply -f k8s/'
+                    sh 'kubectl rollout status deployment flask-app'
+                }
             }
+        }
+
+    }
+
+    post {
+        success {
+            echo ' Pipeline completed successfully. Application deployed to EKS!'
+        }
+        failure {
+            echo ' Pipeline failed. Check logs for details.'
         }
     }
 }
