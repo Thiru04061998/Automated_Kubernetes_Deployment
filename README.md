@@ -135,3 +135,7 @@ Live Application URL
 The application is publicly accessible at:
 
 🔗 http://a2fd528b4b7244a11b412fed131b88d7-548785846.ap-south-1.elb.amazonaws.com/
+
+## Screenshots
+Screenshots demonstrating pipeline execution and deployment
+are available in the `screenshots/` directory.
