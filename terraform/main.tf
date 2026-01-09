@@ -1,6 +1,4 @@
-####################
 # VPC
-####################
 resource "aws_vpc" "eks_vpc" {
   cidr_block = "10.0.0.0/16"
   tags = { Name = "eks-vpc" }
@@ -44,9 +42,8 @@ resource "aws_route_table_association" "rt2" {
   route_table_id = aws_route_table.public_rt.id
 }
 
-####################
+
 # IAM Role – EKS
-####################
 resource "aws_iam_role" "eks_role" {
   name = "eks-cluster-role"
 
@@ -65,9 +62,7 @@ resource "aws_iam_role_policy_attachment" "eks_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
 
-####################
 # EKS Cluster
-####################
 resource "aws_eks_cluster" "eks" {
   name     = var.cluster_name
   role_arn = aws_iam_role.eks_role.arn
@@ -81,10 +76,7 @@ resource "aws_eks_cluster" "eks" {
 
   depends_on = [aws_iam_role_policy_attachment.eks_policy]
 }
-
-####################
 # IAM Role – Nodes
-####################
 resource "aws_iam_role" "node_role" {
   name = "eks-node-role"
 
@@ -113,9 +105,7 @@ resource "aws_iam_role_policy_attachment" "node_policy3" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-####################
 # Node Group
-####################
 resource "aws_eks_node_group" "node_group" {
   cluster_name    = aws_eks_cluster.eks.name
   node_group_name = "eks-nodes"
